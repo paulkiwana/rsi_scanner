@@ -1,4 +1,4 @@
-'''from __future__ import annotations
+from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -340,9 +340,9 @@ def run_scan():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-'''
 
-from __future__ import annotations
+
+'''from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -639,4 +639,4 @@ def run_scan():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)'''
