@@ -5,35 +5,240 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RSI Scanner Web</title>
   <style>
-    :root { color-scheme: dark; }
-    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
-    .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
-    h1 { margin: 0 0 8px; font-size: 1.4rem; }
-    .muted { color: #94a3b8; font-size: 0.92rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-    label { font-size: 0.85rem; color: #cbd5e1; display: block; margin-bottom: 4px; }
-    input, select, button { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #475569; background: #0b1220; color: #e2e8f0; padding: 8px; }
-    button { background: #2563eb; border: none; font-weight: 700; cursor: pointer; }
-    .checks { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
-    .checks label { display: flex; align-items: center; gap: 6px; margin: 0; }
-    .checks input { width: auto; }
-    .status { font-weight: 700; color: #bfdbfe; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-    th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; vertical-align: top; }
-    th { color: #93c5fd; position: sticky; top: 0; background: #111827; }
-    .table-wrap { overflow-x: auto; max-height: 68vh; overflow-y: auto; }
-    .pill { display: inline-block; background: #1e293b; border: 1px solid #334155; border-radius: 99px; padding: 2px 8px; margin-right: 6px; margin-bottom: 4px; font-size: 0.8rem; }
+    :root {
+      color-scheme: dark;
+      --bg0: #05070f;
+      --bg1: #0c1222;
+      --bg2: #121a2f;
+      --line: rgba(126, 155, 255, 0.28);
+      --text: #dbe7ff;
+      --muted: #9fb2d9;
+      --cyan: #2dd4bf;
+      --violet: #8b5cf6;
+      --pink: #ec4899;
+      --blue: #38bdf8;
+      --green: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(circle at 12% -10%, rgba(139, 92, 246, 0.34) 0%, transparent 40%),
+        radial-gradient(circle at 90% -20%, rgba(45, 212, 191, 0.23) 0%, transparent 42%),
+        radial-gradient(circle at 50% 110%, rgba(236, 72, 153, 0.18) 0%, transparent 40%),
+        linear-gradient(165deg, var(--bg0), #060b19 45%, #050912 100%);
+      min-height: 100vh;
+    }
+    .noise::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.05) 0.6px, transparent 0.7px);
+      background-size: 3px 3px;
+      opacity: 0.16;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .glass {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(17, 23, 43, 0.78), rgba(10, 15, 30, 0.78));
+      backdrop-filter: blur(12px);
+      border-radius: 18px;
+      box-shadow: 0 16px 46px rgba(7, 11, 26, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .hero {
+      position: relative;
+      padding: 18px;
+      background:
+        linear-gradient(125deg, rgba(45, 212, 191, 0.16), transparent 32%),
+        linear-gradient(220deg, rgba(139, 92, 246, 0.18), transparent 40%);
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.32rem;
+      letter-spacing: 0.2px;
+    }
+    .subtitle { margin-top: 7px; color: var(--muted); font-size: 0.93rem; }
+    .meta {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border: 1px solid rgba(104, 131, 214, 0.45);
+      border-radius: 999px;
+      font-size: 0.76rem;
+      color: #c2d3ff;
+      background: rgba(9, 13, 27, 0.72);
+    }
+    .panel { padding: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.79rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #92a9d8;
+      font-weight: 600;
+    }
+    input, select, button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(111, 142, 230, 0.38);
+      background: linear-gradient(180deg, rgba(13, 20, 40, 0.95), rgba(8, 14, 30, 0.95));
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.06s ease;
+    }
+    input:focus, select:focus {
+      border-color: rgba(56, 189, 248, 0.85);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2), 0 0 24px rgba(56, 189, 248, 0.2);
+    }
+    .checks {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .checks label {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 0.84rem;
+      color: #d0dcff;
+      font-weight: 500;
+      border: 1px solid rgba(102, 128, 201, 0.45);
+      background: rgba(9, 15, 31, 0.82);
+      border-radius: 999px;
+      padding: 7px 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .checks input {
+      width: 16px;
+      height: 16px;
+      accent-color: #38bdf8;
+    }
+    .actions { margin-top: 12px; }
+    button {
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: white;
+      background:
+        linear-gradient(95deg, #0ea5e9 0%, #8b5cf6 55%, #ec4899 100%);
+      box-shadow: 0 10px 24px rgba(80, 70, 230, 0.35);
+    }
+    button:hover { filter: brightness(1.06); }
+    button:active { transform: translateY(1px); }
+    .status {
+      padding: 13px 14px;
+      border-top: 1px solid rgba(96, 120, 193, 0.32);
+      color: #d8e5ff;
+      font-weight: 650;
+      background: linear-gradient(90deg, rgba(10, 17, 34, 0.65), rgba(8, 14, 30, 0.65));
+    }
+    .status strong { color: #66e7ff; }
+    .notif-title {
+      margin: 0 0 4px;
+      font-size: 0.97rem;
+      color: #bde3ff;
+    }
+    .notif-sub {
+      margin: 10px 0 7px;
+      font-size: 0.82rem;
+      color: #8bc0ff;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      margin: 0 6px 6px 0;
+      border: 1px solid rgba(105, 130, 205, 0.45);
+      background: linear-gradient(180deg, rgba(14, 22, 44, 0.9), rgba(11, 18, 36, 0.9));
+      color: #cfe4ff;
+      padding: 5px 10px;
+      font-size: 0.78rem;
+    }
+    .table-wrap { max-height: 72vh; overflow: auto; }
+    table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      text-align: left;
+      color: #7dd3fc;
+      background: rgba(9, 15, 31, 0.95);
+      border-bottom: 1px solid rgba(95, 122, 199, 0.45);
+      padding: 10px 10px;
+      font-size: 0.77rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    tbody td {
+      padding: 10px;
+      border-bottom: 1px solid rgba(83, 106, 175, 0.24);
+      color: #dbeafe;
+    }
+    tbody tr:nth-child(odd) td { background: rgba(9, 14, 28, 0.48); }
+    tbody tr:hover td { background: rgba(25, 38, 68, 0.45); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .symbol {
+      font-weight: 700;
+      color: #d8d7ff;
+    }
+    .source {
+      color: #84cc16;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 16px 10px;
+    }
+    @media (max-width: 600px) {
+      .wrap { padding: 12px; }
+      h1 { font-size: 1.15rem; }
+      .panel { padding: 12px; }
+      .checks label { font-size: 0.8rem; }
+    }
   </style>
 </head>
-<body>
+<body class="noise">
   <div class="wrap">
-    <div class="card">
+    <div class="glass hero">
       <h1>Monthly RSI(6) Scanner</h1>
-      <div class="muted">Web version for Render + phone usage. Supports oversold/overbought, chain filters, and new Alpha token alerts.</div>
+      <div class="subtitle">Web3-style mobile scanner for Bybit perps and Binance Alpha markets.</div>
+      <div class="meta">
+        <span class="chip">Oversold / Overbought Mode</span>
+        <span class="chip">Alpha Chain Filter</span>
+        <span class="chip">New Listing Radar (&lt;1d / &lt;7d)</span>
+      </div>
     </div>
 
-    <form method="post" action="/scan" class="card">
+    <form method="post" action="/scan" class="glass panel">
       <div class="grid">
         <div>
           <label>RSI Mode</label>
@@ -71,20 +276,20 @@
         <label><input type="checkbox" name="notify_7d" {% if form.notify_7d %}checked{% endif %}>Notify new Alpha &lt;7 days</label>
       </div>
 
-      <div style="margin-top: 10px;">
+      <div class="actions">
         <button type="submit">Run Scan</button>
       </div>
     </form>
 
-    <div class="card">
-      <div class="status">{{ status }}</div>
+    <div class="glass">
+      <div class="status"><strong>Status:</strong> {{ status }}</div>
     </div>
 
     {% if notifications %}
-    <div class="card">
-      <h3 style="margin-top:0;">New Binance Alpha Tokens</h3>
+    <div class="glass panel">
+      <h3 class="notif-title">New Binance Alpha Tokens</h3>
       {% if notifications.under_1d is defined %}
-      <div class="muted" style="margin-bottom:6px;">&lt; 1 day: {{ notifications.under_1d|length }}</div>
+      <div class="notif-sub">&lt; 1 day: {{ notifications.under_1d|length }}</div>
       <div>
         {% for row in notifications.under_1d[:20] %}
         <span class="pill">{{ row.symbol }} | {{ row.chain }} | {{ row.age_days }}d</span>
@@ -92,7 +297,7 @@
       </div>
       {% endif %}
       {% if notifications.under_7d is defined %}
-      <div class="muted" style="margin:10px 0 6px;">&lt; 7 days: {{ notifications.under_7d|length }}</div>
+      <div class="notif-sub">&lt; 7 days: {{ notifications.under_7d|length }}</div>
       <div>
         {% for row in notifications.under_7d[:30] %}
         <span class="pill">{{ row.symbol }} | {{ row.chain }} | {{ row.age_days }}d</span>
@@ -102,7 +307,7 @@
     </div>
     {% endif %}
 
-    <div class="card table-wrap">
+    <div class="glass table-wrap">
       <table>
         <thead>
           <tr>
@@ -119,18 +324,18 @@
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.exchange }}</td>
-            <td>{{ row.symbol }}</td>
+            <td class="source">{{ row.exchange }}</td>
+            <td class="symbol">{{ row.symbol }}</td>
             <td>{{ row.api_symbol }}</td>
-            <td>{{ "%.2f"|format(row.rsi6) }}</td>
-            <td>{{ "%.8f"|format(row.last_close) }}</td>
-            <td>{{ row.candles }}</td>
+            <td class="num">{{ "%.2f"|format(row.rsi6) }}</td>
+            <td class="num">{{ "%.8f"|format(row.last_close) }}</td>
+            <td class="num">{{ row.candles }}</td>
             <td>{{ row.token_chain }}</td>
             <td>{{ row.contract_address }}</td>
           </tr>
           {% endfor %}
           {% if rows|length == 0 %}
-          <tr><td colspan="8" class="muted">No rows yet. Run a scan.</td></tr>
+          <tr><td colspan="8" class="empty">No rows yet. Run a scan.</td></tr>
           {% endif %}
         </tbody>
       </table>
