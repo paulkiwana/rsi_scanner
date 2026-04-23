@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSI Scanner Web</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .muted { color: #94a3b8; font-size: 0.92rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    label { font-size: 0.85rem; color: #cbd5e1; display: block; margin-bottom: 4px; }
+    input, select, button { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #475569; background: #0b1220; color: #e2e8f0; padding: 8px; }
+    button { background: #2563eb; border: none; font-weight: 700; cursor: pointer; }
+    .checks { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+    .checks label { display: flex; align-items: center; gap: 6px; margin: 0; }
+    .checks input { width: auto; }
+    .status { font-weight: 700; color: #bfdbfe; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td { border-bottom: 1px solid #334155; padding: 8px; text-align: left; vertical-align: top; }
+    th { color: #93c5fd; position: sticky; top: 0; background: #111827; }
+    .table-wrap { overflow-x: auto; max-height: 68vh; overflow-y: auto; }
+    .pill { display: inline-block; background: #1e293b; border: 1px solid #334155; border-radius: 99px; padding: 2px 8px; margin-right: 6px; margin-bottom: 4px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Monthly RSI(6) Scanner</h1>
+      <div class="muted">Web version for Render + phone usage. Supports oversold/overbought, chain filters, and new Alpha token alerts.</div>
+    </div>
+
+    <form method="post" action="/scan" class="card">
+      <div class="grid">
+        <div>
+          <label>RSI Mode</label>
+          <select name="rsi_mode">
+            <option value="oversold" {% if form.rsi_mode == "oversold" %}selected{% endif %}>Oversold (&lt;)</option>
+            <option value="overbought" {% if form.rsi_mode == "overbought" %}selected{% endif %}>Overbought (&gt;)</option>
+          </select>
+        </div>
+        <div>
+          <label>Threshold</label>
+          <input name="threshold" value="{{ form.threshold }}">
+        </div>
+        <div>
+          <label>Min monthly candles</label>
+          <input name="min_candles" value="{{ form.min_candles }}">
+        </div>
+        <div>
+          <label>Workers</label>
+          <input name="workers" value="{{ form.workers }}">
+        </div>
+        <div>
+          <label>Alpha chain</label>
+          <select name="chain_filter">
+            {% for option in chain_options %}
+            <option value="{{ option }}" {% if option == form.chain_filter %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="checks">
+        <label><input type="checkbox" name="include_bybit" {% if form.include_bybit %}checked{% endif %}>Bybit Perpetuals</label>
+        <label><input type="checkbox" name="include_alpha" {% if form.include_alpha %}checked{% endif %}>Binance Alpha</label>
+        <label><input type="checkbox" name="notify_1d" {% if form.notify_1d %}checked{% endif %}>Notify new Alpha &lt;1 day</label>
+        <label><input type="checkbox" name="notify_7d" {% if form.notify_7d %}checked{% endif %}>Notify new Alpha &lt;7 days</label>
+      </div>
+
+      <div style="margin-top: 10px;">
+        <button type="submit">Run Scan</button>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="status">{{ status }}</div>
+    </div>
+
+    {% if notifications %}
+    <div class="card">
+      <h3 style="margin-top:0;">New Binance Alpha Tokens</h3>
+      {% if notifications.under_1d is defined %}
+      <div class="muted" style="margin-bottom:6px;">&lt; 1 day: {{ notifications.under_1d|length }}</div>
+      <div>
+        {% for row in notifications.under_1d[:20] %}
+        <span class="pill">{{ row.symbol }} | {{ row.chain }} | {{ row.age_days }}d</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if notifications.under_7d is defined %}
+      <div class="muted" style="margin:10px 0 6px;">&lt; 7 days: {{ notifications.under_7d|length }}</div>
+      <div>
+        {% for row in notifications.under_7d[:30] %}
+        <span class="pill">{{ row.symbol }} | {{ row.chain }} | {{ row.age_days }}d</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Exchange</th>
+            <th>Symbol</th>
+            <th>API Symbol</th>
+            <th>RSI(6)</th>
+            <th>Last Close</th>
+            <th>Candles</th>
+            <th>Chain</th>
+            <th>Contract Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.exchange }}</td>
+            <td>{{ row.symbol }}</td>
+            <td>{{ row.api_symbol }}</td>
+            <td>{{ "%.2f"|format(row.rsi6) }}</td>
+            <td>{{ "%.8f"|format(row.last_close) }}</td>
+            <td>{{ row.candles }}</td>
+            <td>{{ row.token_chain }}</td>
+            <td>{{ row.contract_address }}</td>
+          </tr>
+          {% endfor %}
+          {% if rows|length == 0 %}
+          <tr><td colspan="8" class="muted">No rows yet. Run a scan.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
