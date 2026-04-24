@@ -57,13 +57,39 @@ class RsiScannerApi:
         self.session = requests.Session()
         self.timeout = timeout
 
-    def _get(self, url: str, params: dict | None = None) -> dict:
+    '''def _get(self, url: str, params: dict | None = None) -> dict:
         response = self.session.get(url, params=params, timeout=self.timeout)
         response.raise_for_status()
         payload = response.json()
         if isinstance(payload, dict):
             return payload
-        raise ValueError("Unexpected JSON payload.")
+        raise ValueError("Unexpected JSON payload.")'''
+    
+    def _get(self, url: str, params: dict | None = None) -> dict | None:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        }
+
+        try:
+            r = self.session.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=self.timeout,
+            )
+
+            if not r.ok:
+                print(f"[API ERROR] {url}")
+                print("Status:", r.status_code)
+                print("Response:", r.text)
+                return None
+
+            return r.json()
+
+        except requests.RequestException as e:
+            print("[REQUEST FAILED]", str(e))
+            return None
 
     def get_bybit_perp_symbols(self) -> list[str]:
         all_symbols = []
@@ -73,6 +99,11 @@ class RsiScannerApi:
             if cursor:
                 params["cursor"] = cursor
             payload = self._get(f"{BYBIT_BASE}/v5/market/instruments-info", params=params)
+            
+            if not payload:
+                print("Bybit API failed - returning empty list")
+                return []
+
             result = payload.get("result", {})
             items = result.get("list", [])
             for item in items:
@@ -90,6 +121,10 @@ class RsiScannerApi:
             f"{BYBIT_BASE}/v5/market/kline",
             params={"category": "linear", "symbol": symbol, "interval": "M", "limit": limit},
         )
+
+        if not payload:
+            return []
+
         rows = payload.get("result", {}).get("list", [])
         closes = [float(row[4]) for row in rows if len(row) >= 5]
         closes.reverse()
@@ -341,302 +376,3 @@ def run_scan():
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
 
-
-'''from __future__ import annotations
-
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-
-import requests
-from flask import Flask, render_template, request
-
-BYBIT_BASE = "https://api.bybit.com"
-BINANCE_ALPHA_BASE = "https://www.binance.com"
-
-app = Flask(__name__)
-
-
-@dataclass
-class ScanRow:
-    exchange: str
-    symbol: str
-    api_symbol: str
-    token_chain: str
-    contract_address: str
-    rsi6: float
-    last_close: float
-    candles: int
-
-
-# -------------------- RSI --------------------
-
-def compute_rsi(prices: list[float], period: int = 6) -> float | None:
-    if len(prices) <= period:
-        return None
-
-    gains, losses = [], []
-
-    for i in range(1, period + 1):
-        change = prices[i] - prices[i - 1]
-        gains.append(max(change, 0))
-        losses.append(abs(min(change, 0)))
-
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-
-    for i in range(period + 1, len(prices)):
-        change = prices[i] - prices[i - 1]
-        gain = max(change, 0)
-        loss = abs(min(change, 0))
-
-        avg_gain = ((avg_gain * (period - 1)) + gain) / period
-        avg_loss = ((avg_loss * (period - 1)) + loss) / period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-
-# -------------------- API CLIENT --------------------
-
-class RsiScannerApi:
-    def __init__(self, timeout: int = 12):
-        self.session = requests.Session()
-        self.timeout = timeout
-
-    def _get(self, url: str, params: dict | None = None) -> dict | None:
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
-        }
-
-        try:
-            r = self.session.get(
-                url,
-                params=params,
-                headers=headers,
-                timeout=self.timeout,
-            )
-
-            if not r.ok:
-                print(f"[API ERROR] {url}")
-                print("Status:", r.status_code)
-                print("Response:", r.text)
-                return None
-
-            return r.json()
-
-        except requests.RequestException as e:
-            print("[REQUEST FAILED]", str(e))
-            return None
-
-    # -------------------- BYBIT --------------------
-
-    def get_bybit_perp_symbols(self) -> list[str]:
-        all_symbols = []
-        cursor = None
-
-        while True:
-            params = {"category": "linear", "limit": 1000}
-            if cursor:
-                params["cursor"] = cursor
-
-            payload = self._get(f"{BYBIT_BASE}/v5/market/instruments-info", params=params)
-
-            if not payload:
-                print("Bybit API failed - returning empty list")
-                return []
-
-            result = payload.get("result", {})
-            items = result.get("list", [])
-
-            for item in items:
-                if item.get("status") == "Trading":
-                    symbol = item.get("symbol", "")
-                    if symbol.endswith("USDT"):
-                        all_symbols.append(symbol)
-
-            cursor = result.get("nextPageCursor")
-            if not cursor:
-                break
-
-        return sorted(set(all_symbols))
-
-    def get_bybit_monthly_closes(self, symbol: str, limit: int = 200) -> list[float]:
-        payload = self._get(
-            f"{BYBIT_BASE}/v5/market/kline",
-            params={"category": "linear", "symbol": symbol, "interval": "M", "limit": limit},
-        )
-
-        if not payload:
-            return []
-
-        rows = payload.get("result", {}).get("list", [])
-        closes = [float(r[4]) for r in rows if len(r) >= 5]
-
-        closes.reverse()
-        return closes
-
-    # -------------------- BINANCE ALPHA --------------------
-
-    def get_binance_alpha_symbol_pairs(self):
-        token_payload = self._get(
-            f"{BINANCE_ALPHA_BASE}/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list"
-        )
-        exchange_payload = self._get(
-            f"{BINANCE_ALPHA_BASE}/bapi/defi/v1/public/alpha-trade/get-exchange-info"
-        )
-
-        if not token_payload or not exchange_payload:
-            return []
-
-        tradable = {
-            s.get("symbol", "")
-            for s in exchange_payload.get("data", {}).get("symbols", [])
-            if s.get("status") == "TRADING"
-        }
-
-        pairs = []
-
-        for token in token_payload.get("data", []):
-            alpha_id = token.get("alphaId")
-            symbol = token.get("symbol")
-
-            if not alpha_id or not symbol:
-                continue
-
-            api_symbol = f"{alpha_id}USDT"
-
-            if api_symbol in tradable:
-                pairs.append((
-                    f"{symbol.upper()}USDT",
-                    api_symbol,
-                    token.get("chainName", "") or token.get("chainId", ""),
-                    token.get("contractAddress", ""),
-                    int(token.get("listingTime", 0) or 0),
-                ))
-
-        return pairs
-
-
-# -------------------- SCAN LOGIC --------------------
-
-def scan_symbol(
-    api: RsiScannerApi,
-    exchange: str,
-    display_symbol: str,
-    api_symbol: str,
-    token_chain: str,
-    contract_address: str,
-    threshold: float,
-    min_candles: int,
-    overbought_mode: bool,
-) -> ScanRow | None:
-    try:
-        if exchange == "bybit":
-            closes = api.get_bybit_monthly_closes(api_symbol)
-            exchange_name = "Bybit"
-        else:
-            return None
-
-        if len(closes) < min_candles:
-            return None
-
-        rsi = compute_rsi(closes, 6)
-        if rsi is None:
-            return None
-
-        if overbought_mode and rsi <= threshold:
-            return None
-        if not overbought_mode and rsi >= threshold:
-            return None
-
-        return ScanRow(
-            exchange=exchange_name,
-            symbol=display_symbol,
-            api_symbol=api_symbol,
-            token_chain=token_chain,
-            contract_address=contract_address,
-            rsi6=rsi,
-            last_close=closes[-1],
-            candles=len(closes),
-        )
-
-    except Exception as e:
-        print("[SCAN ERROR]", e)
-        return None
-
-
-# -------------------- ROUTES --------------------
-
-@app.get("/")
-def home():
-    return render_template("index.html", form={}, rows=[], status="Ready")
-
-
-@app.post("/scan")
-def run_scan():
-    form = {
-        "include_bybit": request.form.get("include_bybit") == "on",
-        "threshold": float(request.form.get("threshold", 5)),
-        "min_candles": int(request.form.get("min_candles", 15)),
-        "workers": max(1, int(request.form.get("workers", 10))),
-        "rsi_mode": request.form.get("rsi_mode", "oversold"),
-    }
-
-    api = RsiScannerApi()
-    targets = []
-    results = []
-
-    overbought_mode = form["rsi_mode"] == "overbought"
-
-    # ---------------- BYBIT SAFE LOAD ----------------
-    if form["include_bybit"]:
-        bybit_symbols = api.get_bybit_perp_symbols()
-
-        if not bybit_symbols:
-            print("Bybit skipped (API blocked or failed)")
-        else:
-            targets.extend([
-                ("bybit", s, s, "", "")
-                for s in bybit_symbols
-            ])
-
-    # ---------------- SCAN ----------------
-    with ThreadPoolExecutor(max_workers=form["workers"]) as pool:
-        futures = [
-            pool.submit(
-                scan_symbol,
-                api,
-                ex,
-                sym,
-                api_sym,
-                chain,
-                addr,
-                form["threshold"],
-                form["min_candles"],
-                overbought_mode,
-            )
-            for ex, sym, api_sym, chain, addr in targets
-        ]
-
-        for f in as_completed(futures):
-            r = f.result()
-            if r:
-                results.append(r)
-
-    results.sort(key=lambda x: x.rsi6, reverse=overbought_mode)
-
-    return render_template(
-        "index.html",
-        form=form,
-        rows=results,
-        status=f"Scanned {len(targets)} symbols → {len(results)} matches",
-    )
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)'''
