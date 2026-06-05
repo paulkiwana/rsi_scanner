@@ -8,7 +8,14 @@ import requests
 from flask import Flask, render_template, request
 
 BYBIT_BASE = "https://api.bybit.com"
+BINANCE_FUTURES_BASE = "https://fapi.binance.com"
 BINANCE_ALPHA_BASE = "https://www.binance.com"
+
+TIMEFRAMES = {
+    "daily": {"label": "Daily", "bybit": "D", "binance": "1d", "binance_alpha": "1d"},
+    "weekly": {"label": "Weekly", "bybit": "W", "binance": "1w", "binance_alpha": "1w"},
+    "monthly": {"label": "Monthly", "bybit": "M", "binance": "1M", "binance_alpha": "1M"},
+}
 
 app = Flask(__name__)
 
@@ -116,10 +123,10 @@ class RsiScannerApi:
                 break
         return sorted(set(all_symbols))
 
-    def get_bybit_monthly_closes(self, symbol: str, limit: int = 200) -> list[float]:
+    def get_bybit_closes(self, symbol: str, interval: str, limit: int = 200) -> list[float]:
         payload = self._get(
             f"{BYBIT_BASE}/v5/market/kline",
-            params={"category": "linear", "symbol": symbol, "interval": "M", "limit": limit},
+            params={"category": "linear", "symbol": symbol, "interval": interval, "limit": limit},
         )
 
         if not payload:
@@ -129,6 +136,33 @@ class RsiScannerApi:
         closes = [float(row[4]) for row in rows if len(row) >= 5]
         closes.reverse()
         return closes
+
+    def get_binance_perp_symbols(self) -> list[str]:
+        payload = self._get(f"{BINANCE_FUTURES_BASE}/fapi/v1/exchangeInfo")
+        if not payload:
+            print("Binance Futures API failed - returning empty list")
+            return []
+
+        symbols = []
+        for item in payload.get("symbols", []):
+            if (
+                item.get("status") == "TRADING"
+                and item.get("contractType") == "PERPETUAL"
+                and item.get("quoteAsset") == "USDT"
+            ):
+                symbol = item.get("symbol", "")
+                if symbol:
+                    symbols.append(symbol)
+        return sorted(set(symbols))
+
+    def get_binance_perp_closes(self, symbol: str, interval: str, limit: int = 200) -> list[float]:
+        payload = self._get(
+            f"{BINANCE_FUTURES_BASE}/fapi/v1/klines",
+            params={"symbol": symbol, "interval": interval, "limit": limit},
+        )
+        if not payload or not isinstance(payload, list):
+            return []
+        return [float(row[4]) for row in payload if isinstance(row, list) and len(row) >= 5]
 
     def get_binance_alpha_symbol_pairs(self) -> list[tuple[str, str, str, str, int]]:
         token_payload = self._get(
@@ -159,11 +193,13 @@ class RsiScannerApi:
 
         return sorted(set(pairs), key=lambda x: x[0])
 
-    def get_binance_alpha_monthly_closes(self, symbol: str, limit: int = 200) -> list[float]:
+    def get_binance_alpha_closes(self, symbol: str, interval: str, limit: int = 200) -> list[float]:
         payload = self._get(
             f"{BINANCE_ALPHA_BASE}/bapi/defi/v1/public/alpha-trade/klines",
-            params={"symbol": symbol, "interval": "1M", "limit": limit},
+            params={"symbol": symbol, "interval": interval, "limit": limit},
         )
+        if not payload:
+            return []
         rows = payload.get("data", [])
         closes = []
         for row in rows:
@@ -179,16 +215,21 @@ def scan_symbol(
     api_symbol: str,
     token_chain: str,
     contract_address: str,
+    timeframe: str,
     threshold: float,
     min_candles: int,
     overbought_mode: bool,
 ) -> ScanRow | None:
     try:
+        tf = TIMEFRAMES.get(timeframe, TIMEFRAMES["monthly"])
         if exchange == "bybit":
-            closes = api.get_bybit_monthly_closes(api_symbol)
+            closes = api.get_bybit_closes(api_symbol, tf["bybit"])
             exchange_name = "Bybit Perp"
+        elif exchange == "binance_perp":
+            closes = api.get_binance_perp_closes(api_symbol, tf["binance"])
+            exchange_name = "Binance Perp"
         else:
-            closes = api.get_binance_alpha_monthly_closes(api_symbol)
+            closes = api.get_binance_alpha_closes(api_symbol, tf["binance_alpha"])
             exchange_name = "Binance Alpha"
 
         if len(closes) < min_candles:
@@ -257,7 +298,9 @@ def build_new_token_notifications(
 def home():
     defaults = {
         "include_bybit": True,
+        "include_binance_perp": True,
         "include_alpha": True,
+        "timeframe": "monthly",
         "rsi_mode": "oversold",
         "threshold": "5",
         "min_candles": "15",
@@ -280,7 +323,9 @@ def home():
 def run_scan():
     form = {
         "include_bybit": request.form.get("include_bybit") == "on",
+        "include_binance_perp": request.form.get("include_binance_perp") == "on",
         "include_alpha": request.form.get("include_alpha") == "on",
+        "timeframe": request.form.get("timeframe", "monthly"),
         "rsi_mode": request.form.get("rsi_mode", "oversold"),
         "threshold": request.form.get("threshold", "5"),
         "min_candles": request.form.get("min_candles", "15"),
@@ -290,13 +335,16 @@ def run_scan():
         "notify_7d": request.form.get("notify_7d") == "on",
     }
 
-    if not form["include_bybit"] and not form["include_alpha"]:
+    if form["timeframe"] not in TIMEFRAMES:
+        form["timeframe"] = "monthly"
+
+    if not form["include_bybit"] and not form["include_binance_perp"] and not form["include_alpha"]:
         return render_template(
             "index.html",
             form=form,
             rows=[],
             chain_options=["All Chains"],
-            status="Enable at least one source: Bybit or Binance Alpha.",
+            status="Enable at least one source: Bybit Perps, Binance Perps, or Binance Alpha.",
             notifications=None,
         )
 
@@ -324,6 +372,10 @@ def run_scan():
         bybit_symbols = api.get_bybit_perp_symbols()
         targets.extend([("bybit", symbol, symbol, "", "") for symbol in bybit_symbols])
 
+    if form["include_binance_perp"]:
+        binance_perp_symbols = api.get_binance_perp_symbols()
+        targets.extend([("binance_perp", symbol, symbol, "", "") for symbol in binance_perp_symbols])
+
     if form["include_alpha"]:
         alpha_pairs = api.get_binance_alpha_symbol_pairs()
         chain_options = ["All Chains", *sorted({row[2] for row in alpha_pairs if row[2]})]
@@ -348,6 +400,7 @@ def run_scan():
                 api_symbol,
                 token_chain,
                 contract_address,
+                form["timeframe"],
                 threshold,
                 min_candles,
                 overbought_mode,
@@ -361,7 +414,11 @@ def run_scan():
 
     results.sort(key=lambda x: x.rsi6, reverse=overbought_mode)
     comparator = ">" if overbought_mode else "<"
-    status = f"Scanned {len(targets)} symbols. Found {len(results)} matches with RSI(6) {comparator} {threshold}."
+    tf_label = TIMEFRAMES[form["timeframe"]]["label"]
+    status = (
+        f"Scanned {len(targets)} symbols ({tf_label} timeframe). "
+        f"Found {len(results)} matches with RSI(6) {comparator} {threshold}."
+    )
 
     return render_template(
         "index.html",

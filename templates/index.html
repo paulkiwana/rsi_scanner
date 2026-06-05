@@ -229,9 +229,10 @@
 <body class="noise">
   <div class="wrap">
     <div class="glass hero">
-      <h1>Monthly RSI(6) Scanner</h1>
-      <div class="subtitle">Web3-style mobile scanner for Bybit perps and Binance Alpha markets.</div>
+      <h1>RSI(6) Scanner</h1>
+      <div class="subtitle">Scan Bybit perps, Binance perps, and Binance Alpha on-chain tokens across daily, weekly, or monthly timeframes.</div>
       <div class="meta">
+        <span class="chip">Daily / Weekly / Monthly</span>
         <span class="chip">Oversold / Overbought Mode</span>
         <span class="chip">Alpha Chain Filter</span>
         <span class="chip">New Listing Radar (&lt;1d / &lt;7d)</span>
@@ -240,6 +241,14 @@
 
     <form method="post" action="/scan" class="glass panel">
       <div class="grid">
+        <div>
+          <label>Timeframe</label>
+          <select name="timeframe">
+            <option value="daily" {% if form.timeframe == "daily" %}selected{% endif %}>Daily</option>
+            <option value="weekly" {% if form.timeframe == "weekly" %}selected{% endif %}>Weekly</option>
+            <option value="monthly" {% if form.timeframe == "monthly" %}selected{% endif %}>Monthly</option>
+          </select>
+        </div>
         <div>
           <label>RSI Mode</label>
           <select name="rsi_mode">
@@ -252,7 +261,7 @@
           <input name="threshold" value="{{ form.threshold }}">
         </div>
         <div>
-          <label>Min monthly candles</label>
+          <label>Min candles</label>
           <input name="min_candles" value="{{ form.min_candles }}">
         </div>
         <div>
@@ -271,7 +280,8 @@
 
       <div class="checks">
         <label><input type="checkbox" name="include_bybit" {% if form.include_bybit %}checked{% endif %}>Bybit Perpetuals</label>
-        <label><input type="checkbox" name="include_alpha" {% if form.include_alpha %}checked{% endif %}>Binance Alpha</label>
+        <label><input type="checkbox" name="include_binance_perp" {% if form.include_binance_perp %}checked{% endif %}>Binance Perpetuals</label>
+        <label><input type="checkbox" name="include_alpha" {% if form.include_alpha %}checked{% endif %}>Binance Alpha (On-Chain)</label>
         <label><input type="checkbox" name="notify_1d" {% if form.notify_1d %}checked{% endif %}>Notify new Alpha &lt;1 day</label>
         <label><input type="checkbox" name="notify_7d" {% if form.notify_7d %}checked{% endif %}>Notify new Alpha &lt;7 days</label>
       </div>
