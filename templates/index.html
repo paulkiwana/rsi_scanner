@@ -230,9 +230,9 @@
   <div class="wrap">
     <div class="glass hero">
       <h1>RSI(6) Scanner</h1>
-      <div class="subtitle">Scan Bybit perps, Binance perps, and Binance Alpha on-chain tokens across daily, weekly, or monthly timeframes.</div>
+      <div class="subtitle">Scan Bybit perps, Binance perps, and Binance Alpha on-chain tokens across 4-hour, daily, weekly, or monthly timeframes.</div>
       <div class="meta">
-        <span class="chip">Daily / Weekly / Monthly</span>
+        <span class="chip">4H / Daily / Weekly / Monthly</span>
         <span class="chip">Oversold / Overbought Mode</span>
         <span class="chip">Alpha Chain Filter</span>
         <span class="chip">New Listing Radar (&lt;1d / &lt;7d)</span>
@@ -244,6 +244,7 @@
         <div>
           <label>Timeframe</label>
           <select name="timeframe">
+            <option value="4hour" {% if form.timeframe == "4hour" %}selected{% endif %}>4 Hour</option>
             <option value="daily" {% if form.timeframe == "daily" %}selected{% endif %}>Daily</option>
             <option value="weekly" {% if form.timeframe == "weekly" %}selected{% endif %}>Weekly</option>
             <option value="monthly" {% if form.timeframe == "monthly" %}selected{% endif %}>Monthly</option>

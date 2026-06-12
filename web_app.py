@@ -12,6 +12,7 @@ BINANCE_FUTURES_BASE = "https://fapi.binance.com"
 BINANCE_ALPHA_BASE = "https://www.binance.com"
 
 TIMEFRAMES = {
+    "4hour": {"label": "4 Hour", "bybit": "240", "binance": "4h", "binance_alpha": "4h"},
     "daily": {"label": "Daily", "bybit": "D", "binance": "1d", "binance_alpha": "1d"},
     "weekly": {"label": "Weekly", "bybit": "W", "binance": "1w", "binance_alpha": "1w"},
     "monthly": {"label": "Monthly", "bybit": "M", "binance": "1M", "binance_alpha": "1M"},
